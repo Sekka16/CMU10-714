@@ -1,5 +1,6 @@
 """The module.
 """
+
 from typing import List, Callable, Any
 from needle.autograd import Tensor
 from needle import ops
@@ -88,20 +89,24 @@ class Linear(Module):
         self.out_features = out_features
 
         ### BEGIN YOUR SOLUTION
-        self.weight = Parameter(init.kaiming_uniform(in_features, out_features, dtype=dtype))
+        self.weight = Parameter(
+            init.kaiming_uniform(in_features, out_features, dtype=dtype)
+        )
         if bias:
-            self.bias = Parameter(ops.transpose(init.kaiming_uniform(out_features, 1, dtype=dtype)))
+            self.bias = Parameter(
+                ops.transpose(init.kaiming_uniform(out_features, 1, dtype=dtype))
+            )
         else:
             self.bias = None
         ### END YOUR SOLUTION
 
     def forward(self, X: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        mul = ops.matmul(X, self.weight)
+        mul = X @ self.weight
         if self.bias is None:
             return mul
         else:
-            return ops.add(mul, ops.broadcast_to(self.bias, mul.shape))
+            return mul + ops.broadcast_to(self.bias, mul.shape)
         ### END YOUR SOLUTION
 
 
@@ -137,13 +142,13 @@ class SoftmaxLoss(Module):
         ### BEGIN YOUR SOLUTION
         batch_size = logits.shape[0]
         classes = logits.shape[1]
-        
+
         normalize_x = ops.logsumexp(logits, axes=1)
         y_one_hot = init.one_hot(classes, y)
-        
-        Z_y = ops.summation(logits * y_one_hot,axes=1) 
+
+        Z_y = ops.summation(logits * y_one_hot, axes=1)
         loss = ops.summation(normalize_x - Z_y)
-        
+
         return loss / batch_size
         ### END YOUR SOLUTION
 
@@ -168,35 +173,45 @@ class BatchNorm1d(Module):
         broadcast_bias = ops.broadcast_to(ops.reshape(self.bias, (1, -1)), x.shape)
 
         if self.training:
-            mean_x = ops.divide_scalar(ops.summation(x, axes=0), batch_size)
-            broadcast_mean = ops.broadcast_to(ops.reshape(mean_x, (1,-1)), x.shape)
+            mean_x = ops.summation(x, axes=0) / batch_size
+            broadcast_mean = ops.broadcast_to(ops.reshape(mean_x, (1, -1)), x.shape)
 
             numerator = x - broadcast_mean
 
-            var_x = ops.power_scalar(numerator, 2)
-            var_x = ops.summation(ops.divide_scalar(var_x, batch_size), axes=0) # 这里先累加和先处以batch_size是一样的
-            broadcast_var = ops.broadcast_to(ops.reshape(var_x, (1,-1)), x.shape)
+            var_x = numerator**2
+            var_x = ops.summation(
+                var_x / batch_size, axes=0
+            )  # 这里先累加和先处以batch_size是一样的
+            broadcast_var = ops.broadcast_to(ops.reshape(var_x, (1, -1)), x.shape)
 
-            denominator = ops.power_scalar(broadcast_var + self.eps, 0.5)
+            denominator = (broadcast_var + self.eps) ** 0.5
 
             frac = numerator / denominator
 
-            y = ops.multiply(broadcast_weight, frac) + broadcast_bias
+            y = broadcast_weight * frac + broadcast_bias
 
             # update running estimates
-            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean_x
-            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var_x
+            self.running_mean = (
+                1 - self.momentum
+            ) * self.running_mean + self.momentum * mean_x
+            self.running_var = (
+                1 - self.momentum
+            ) * self.running_var + self.momentum * var_x
         else:
-            broadcast_rm = ops.broadcast_to(ops.reshape(self.running_mean, (1, -1)), x.shape)
-            broadcast_rv = ops.broadcast_to(ops.reshape(self.running_var, (1, -1)), x.shape)
+            broadcast_rm = ops.broadcast_to(
+                ops.reshape(self.running_mean, (1, -1)), x.shape
+            )
+            broadcast_rv = ops.broadcast_to(
+                ops.reshape(self.running_var, (1, -1)), x.shape
+            )
 
             numerator = x - broadcast_rm
 
-            denominator = ops.power_scalar(broadcast_rv + self.eps, 0.5)
+            denominator = (broadcast_rv + self.eps) ** 0.5
 
             frac = numerator / denominator
 
-            y = ops.multiply(broadcast_weight, frac) + broadcast_bias
+            y = broadcast_weight * frac + broadcast_bias
 
         return y
         ### END YOUR SOLUTION
@@ -217,29 +232,24 @@ class LayerNorm1d(Module):
         batch_size = x.shape[0]
         features = x.shape[1]
 
-        mean_x = ops.divide_scalar(ops.summation(x, axes=1), features)
-        broadcast_mean = ops.broadcast_to(ops.reshape(mean_x, (-1, 1)), x.shape) # 这里进行broadcast_to的原因是summation的forward调用了numpy的接口，会将(3,3)->(3,)而我们需要的是(3,1)
+        mean_x = ops.summation(x, axes=1) / features
+        broadcast_mean = ops.broadcast_to(
+            ops.reshape(mean_x, (-1, 1)), x.shape
+        )  # 这里进行broadcast_to的原因是summation的forward调用了numpy的接口，会将(3,3)->(3,)而我们需要的是(3,1)
 
-        numerator = x - broadcast_mean # 分子
-        
-        var_x = ops.power_scalar(numerator, 2)
-        var_x = ops.summation(ops.divide_scalar(var_x, features), axes=1)
+        numerator = x - broadcast_mean  # 分子
+
+        var_x = numerator**2
+        var_x = ops.summation(var_x / features, axes=1)
         broadcast_var = ops.broadcast_to(ops.reshape(var_x, (-1, 1)), x.shape)
-        
-        denominator = ops.power_scalar(broadcast_var+self.eps, 0.5) # 分母
-        
+
+        denominator = (broadcast_var + self.eps) ** 0.5  # 分母
+
         frac = numerator / denominator
-        
+
         broadcast_weight = ops.broadcast_to(ops.reshape(self.weight, (1, -1)), x.shape)
         broadcast_bias = ops.broadcast_to(ops.reshape(self.bias, (1, -1)), x.shape)
-        y = ops.multiply(broadcast_weight, frac) + broadcast_bias
-        # print("-------------------------------------------------------")
-        # print(self.dim)
-        # print(self.weight.shape)
-        # print(ops.reshape(self.weight, (1,-1)).shape)
-        # print(broadcast_weight.shape)
-        # print(frac.shape)
-        # print("-------------------------------------------------------")
+        y = broadcast_weight * frac + broadcast_bias
         return y
         ### END YOUR SOLUTION
 
@@ -254,9 +264,9 @@ class Dropout(Module):
         if self.training:
             # randb是把小于p(这里指的是输入参数)的置为1,大于p的置为0
             # 而dropout是self.p概率置为0，所以这里p=1-self.p
-            mask = init.randb(*x.shape, p=1-self.p)             
+            mask = init.randb(*x.shape, p=1 - self.p)
             x = x * mask
-            z = x / (1 - self.p) # 保留的神经元进行放大的原因是保证输出的期望值不变。
+            z = x / (1 - self.p)  # 保留的神经元进行放大的原因是保证输出的期望值不变。
         else:
             z = x
         return z
