@@ -64,20 +64,39 @@ class Adam(Optimizer):
 
         self.m = {}
         self.v = {}
+        print('1 global tensors', ndl.autograd.TENSOR_COUNTER)
 
     def step(self):
         ### BEGIN YOUR SOLUTION
+        # self.t += 1
+        # for param in self.params:
+        #     if param.grad is None:
+        #       continue
+        #     grad_data = ndl.Tensor(param.grad.data + self.weight_decay * param.data, dtype=param.dtype)
+        #     if param not in self.m:
+        #         self.m[param] = 0
+        #     if param not in self.v:
+        #         self.v[param] = 0
+
+        #     self.m[param] = self.beta1 * self.m[param] + (1 - self.beta1) * grad_data
+        #     self.v[param] = self.beta2 * self.v[param] + (1 - self.beta2) * (grad_data ** 2)
+        #     param.data -= ndl.Tensor(self.lr * (self.m[param] / (1 - self.beta1**self.t)) / ((self.v[param] / (1 - self.beta2**self.t))**0.5 + self.eps)).data
+        print('2 global tensors', ndl.autograd.TENSOR_COUNTER)
         self.t += 1
         for param in self.params:
-            if param.grad is None:
-              continue
-            grad_data = ndl.Tensor(param.grad.data + self.weight_decay * param.data, dtype=param.dtype)
-            if param not in self.m:
-                self.m[param] = 0
-            if param not in self.v:
-                self.v[param] = 0
-
-            self.m[param] = self.beta1 * self.m[param] + (1 - self.beta1) * grad_data
-            self.v[param] = self.beta2 * self.v[param] + (1 - self.beta2) * (grad_data ** 2)
-            param.data -= ndl.Tensor(self.lr * (self.m[param] / (1 - self.beta1**self.t)) / ((self.v[param] / (1 - self.beta2**self.t))**0.5 + self.eps)).data
+            deltaf = param.grad.data + self.weight_decay * param.data
+            u_t = self.beta1 * self.m.get(param, 0) + (1 - self.beta1) * deltaf
+            # u_t = ndl.Tensor(u_t, dtype=param.dtype)
+            self.m[param] = u_t
+            v_t = self.beta2 * self.v.get(param, 0) + (1 - self.beta2) * (deltaf ** 2)
+            # v_t = ndl.Tensor(v_t, dtype=param.dtype)
+            self.v[param] = v_t
+            
+            unbiased_u = self.m[param] / (1 - self.beta1 ** self.t)
+            unbiased_v = self.v[param] / (1 - self.beta2 ** self.t)
+            update = self.lr * unbiased_u.data / (unbiased_v.data ** 0.5 + self.eps)
+            update = ndl.Tensor(update, dtype=param.dtype)
+            # print(update)
+            param.data -= update.data
+        print('3 global tensors', ndl.autograd.TENSOR_COUNTER)
         ### END YOUR SOLUTION

@@ -409,11 +409,6 @@ def find_topo_sort(node_list: List[Value]) -> List[Value]:
     # topo_order: 一个列表，用于保存拓扑排序的结果
     visited = set()
     topo_order = []
-    # root_node = node_list[-1]
-    # for node in root_node.inputs:
-    #     topo_sort_dfs(node, visited, topo_order)
-    # visited.add(root_node)
-    # topo_order.append(root_node)
     for node in node_list:
         topo_sort_dfs(node, visited=visited, topo_order=topo_order)
     return topo_order

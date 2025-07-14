@@ -162,8 +162,8 @@ class BatchNorm1d(Module):
         ### BEGIN YOUR SOLUTION
         self.weight = Parameter(init.ones(dim, device=device))
         self.bias = Parameter(init.zeros(dim, device=device))
-        self.running_mean = Parameter(init.zeros(dim, device=device))
-        self.running_var = Parameter(init.ones(dim, device=device))
+        self.running_mean = init.zeros(dim, device=device)
+        self.running_var = init.ones(dim, device=device)
         ### END YOUR SOLUTION
 
     def forward(self, x: Tensor) -> Tensor:
@@ -191,12 +191,8 @@ class BatchNorm1d(Module):
             y = broadcast_weight * frac + broadcast_bias
 
             # update running estimates
-            self.running_mean = (
-                1 - self.momentum
-            ) * self.running_mean + self.momentum * mean_x
-            self.running_var = (
-                1 - self.momentum
-            ) * self.running_var + self.momentum * var_x
+            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean_x.data
+            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var_x.data
         else:
             broadcast_rm = ops.broadcast_to(
                 ops.reshape(self.running_mean, (1, -1)), x.shape
@@ -206,11 +202,8 @@ class BatchNorm1d(Module):
             )
 
             numerator = x - broadcast_rm
-
             denominator = (broadcast_rv + self.eps) ** 0.5
-
             frac = numerator / denominator
-
             y = broadcast_weight * frac + broadcast_bias
 
         return y

@@ -13,18 +13,8 @@ np.random.seed(0)
 
 def ResidualBlock(dim, hidden_dim, norm=nn.BatchNorm1d, drop_prob=0.1):
     ### BEGIN YOUR SOLUTION
-    # main_path = nn.Sequential(nn.Linear(in_features=dim, out_features=hidden_dim),
-    #                           norm(dim=hidden_dim),
-    #                           nn.ReLU(),
-    #                           nn.Dropout(p=drop_prob),
-    #                           nn.Linear(in_features=hidden_dim, out_features=dim),
-    #                           norm(dim=dim))
-    # result = nn.Residual(main_path)
-    # return nn.Sequential(result, nn.ReLU())
-    main_path = nn.Sequential(nn.Linear(dim, hidden_dim), norm(hidden_dim), nn.ReLU(),
-                              nn.Dropout(drop_prob), nn.Linear(hidden_dim, dim), norm(dim))
-    res = nn.Residual(main_path)
-    return nn.Sequential(res, nn.ReLU())
+    body = nn.Sequential(nn.Linear(dim, hidden_dim), norm(hidden_dim), nn.ReLU(), nn.Dropout(drop_prob), nn.Linear(hidden_dim, dim), norm(dim))
+    return nn.Sequential(nn.Residual(body), nn.ReLU())
     ### END YOUR SOLUTION
 
 
@@ -37,7 +27,7 @@ def MLPResNet(
     drop_prob=0.1,
 ):
     ### BEGIN YOUR SOLUTION
-    path = nn.Sequential(nn.Linear(in_features=dim, out_features=hidden_dim),
+    path = nn.Sequential(nn.Flatten(), nn.Linear(in_features=dim, out_features=hidden_dim),
                          nn.ReLU())
     res = []
     for block in range(num_blocks):
@@ -84,26 +74,26 @@ def train_mnist(
 ):
     np.random.seed(4)
     ### BEGIN YOUR SOLUTION
-    train_set = MNISTDataset(f"{data_dir}/train-images-idx3-ubyte.gz",
+    train_set = ndl.data.MNISTDataset(f"{data_dir}/train-images-idx3-ubyte.gz",
                              f"{data_dir}/train-labels-idx1-ubyte.gz")
-    test_set = MNISTDataset(f"{data_dir}/t10k-images-idx3-ubyte.gz",
+    test_set = ndl.data.MNISTDataset(f"{data_dir}/t10k-images-idx3-ubyte.gz",
                             f"{data_dir}/t10k-labels-idx1-ubyte.gz")
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=True)
+    train_loader = ndl.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    test_loader = ndl.data.DataLoader(test_set, batch_size=batch_size, shuffle=True)
 
     model = MLPResNet(28*28, hidden_dim=hidden_dim)
 
-    train_set = MNISTDataset(f"{data_dir}/train-images-idx3-ubyte.gz",
+    train_set = ndl.data.MNISTDataset(f"{data_dir}/train-images-idx3-ubyte.gz",
                              f"{data_dir}/train-labels-idx1-ubyte.gz")
-    test_set = MNISTDataset(f"{data_dir}/t10k-images-idx3-ubyte.gz",
+    test_set = ndl.data.MNISTDataset(f"{data_dir}/t10k-images-idx3-ubyte.gz",
                             f"{data_dir}/t10k-labels-idx1-ubyte.gz")
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=True)
+    train_loader = ndl.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    test_loader = ndl.data.DataLoader(test_set, batch_size=batch_size, shuffle=True)
 
     model = MLPResNet(28*28, hidden_dim=hidden_dim)
     opt = optimizer(params=model.parameters(), lr=lr, weight_decay=weight_decay)
 
-    for epoch in epochs:
+    for i in range(epochs):
         train_error, train_loss = epoch(train_loader, model, opt)
     test_error, test_loss = epoch(test_loader, model, None)
     return train_error, train_loss, test_error, test_loss
