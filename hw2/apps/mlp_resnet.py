@@ -83,14 +83,6 @@ def train_mnist(
 
     model = MLPResNet(28*28, hidden_dim=hidden_dim)
 
-    train_set = ndl.data.MNISTDataset(f"{data_dir}/train-images-idx3-ubyte.gz",
-                             f"{data_dir}/train-labels-idx1-ubyte.gz")
-    test_set = ndl.data.MNISTDataset(f"{data_dir}/t10k-images-idx3-ubyte.gz",
-                            f"{data_dir}/t10k-labels-idx1-ubyte.gz")
-    train_loader = ndl.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = ndl.data.DataLoader(test_set, batch_size=batch_size, shuffle=True)
-
-    model = MLPResNet(28*28, hidden_dim=hidden_dim)
     opt = optimizer(params=model.parameters(), lr=lr, weight_decay=weight_decay)
 
     for i in range(epochs):
