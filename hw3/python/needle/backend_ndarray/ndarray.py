@@ -247,7 +247,21 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # Check if total size matches
+        if prod(self.shape) != prod(new_shape):
+            raise ValueError("Cannot reshape array: total size does not match")
+        # Reshape only allowed on compact arrays
+        if not self.is_compact():
+            raise ValueError("Cannot reshape non-compact array")   
+
+        new_strides = self.compact_strides(new_shape)
+        return NDArray.make(
+            new_shape,
+            strides=new_strides,
+            device=self.device,
+            handle=self._handle,
+            offset=self._offset,
+        )     
         ### END YOUR SOLUTION
 
     def permute(self, new_axes):
@@ -272,7 +286,15 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = tuple(self.shape[i] for i in new_axes)
+        new_strides = tuple(self.strides[i] for i in new_axes)
+        return NDArray.make(
+            shape=new_shape,
+            strides=new_strides,
+            device=self.device,
+            handle=self._handle,
+            offset=self._offset,
+        )
         ### END YOUR SOLUTION
 
     def broadcast_to(self, new_shape):
@@ -296,7 +318,23 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_strides = []
+        for i in range(len(self.shape)):
+            if self.shape[i] == new_shape[i]:
+                new_strides.append(self.strides[i])
+            elif self.shape[i] == 1:
+                new_strides.append(0)
+            else:
+                raise AssertionError(
+                    f"Cannot broadcast shape {self.shape} to {new_shape}"
+                )
+        return NDArray.make(
+            shape=new_shape,
+            strides=tuple(new_strides),
+            device=self.device,
+            handle=self._handle,
+            offset=self._offset,
+        )
         ### END YOUR SOLUTION
 
     ### Get and set elements
@@ -363,7 +401,24 @@ class NDArray:
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = []
+        new_strides = []
+        new_offset = self._offset
+
+        for i, sl in enumerate(idxs):
+            start, stop, step = sl.start, sl.stop, sl.step
+            dim_size = (stop - start + step - 1) // step
+            new_shape.append(dim_size)
+            new_strides.append(self._strides[i] * step)
+            new_offset += self._strides[i] * start
+
+        return NDArray.make(
+            shape=tuple(new_shape),
+            strides=tuple(new_strides),
+            device=self.device,
+            handle=self._handle,
+            offset=new_offset,
+        )
         ### END YOUR SOLUTION
 
     def __setitem__(self, idxs, other):

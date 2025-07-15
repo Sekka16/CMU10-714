@@ -3,6 +3,8 @@
 **/*.pyc
 **/*.pyo
 **/*.pyd
+**/*.so
+**/build/
 
 # Jupyter Notebook 元数据
 **/.ipynb_checkpoints/
