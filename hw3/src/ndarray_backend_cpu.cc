@@ -304,7 +304,14 @@ void Matmul(const AlignedArray& a, const AlignedArray& b, AlignedArray* out, uin
    */
 
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  for (uint32_t i = 0; i < m; ++i) {
+    for (uint32_t j = 0; j < p; ++j) {
+      out->ptr[i * p + j] = 0.0f;  // Initialize the output element to zero
+      for (uint32_t k = 0; k < n; ++k) {
+        out->ptr[i * p + j] += a.ptr[i * n + k] * b.ptr[k * p + j];
+      }
+    }
+  }
   /// END SOLUTION
 }
 
@@ -334,7 +341,13 @@ inline void AlignedDot(const float* __restrict__ a,
   out = (float*)__builtin_assume_aligned(out, TILE * ELEM_SIZE);
 
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  for (uint32_t i = 0; i < TILE; ++i) {
+    for (uint32_t j = 0; j < TILE; ++j) {
+      for (uint32_t k = 0; k < TILE; ++k) {
+        out[i * TILE + j] += a[i * TILE + k] * b[k * TILE + j];
+      }
+    }
+  }
   /// END SOLUTION
 }
 
@@ -360,7 +373,7 @@ void MatmulTiled(const AlignedArray& a, const AlignedArray& b, AlignedArray* out
    *
    */
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+
   /// END SOLUTION
 }
 
@@ -375,7 +388,13 @@ void ReduceMax(const AlignedArray& a, AlignedArray* out, size_t reduce_size) {
    */
 
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  for (size_t i = 0; i < a.size; i += reduce_size) {
+    scalar_t max_val = a.ptr[i];
+    for (size_t j = 1; j < reduce_size && (i + j) < a.size; ++j) {
+      max_val = std::max(max_val, a.ptr[i + j]);
+    }
+    out->ptr[i / reduce_size] = max_val;
+  }
   /// END SOLUTION
 }
 
@@ -390,7 +409,13 @@ void ReduceSum(const AlignedArray& a, AlignedArray* out, size_t reduce_size) {
    */
 
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  for (size_t i = 0; i < a.size; i += reduce_size) {
+    scalar_t sum_val = 0;
+    for (size_t j = 0; j < reduce_size && (i + j) < a.size; ++j) {
+      sum_val += a.ptr[i + j];
+    }
+    out->ptr[i / reduce_size] = sum_val;
+  }
   /// END SOLUTION
 }
 
@@ -449,9 +474,9 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
   m.def("ewise_exp", EwiseExp);
   m.def("ewise_tanh", EwiseTanh);
 
-  // m.def("matmul", Matmul);
-  // m.def("matmul_tiled", MatmulTiled);
+  m.def("matmul", Matmul);
+  m.def("matmul_tiled", MatmulTiled);
 
-  // m.def("reduce_max", ReduceMax);
-  // m.def("reduce_sum", ReduceSum);
+  m.def("reduce_max", ReduceMax);
+  m.def("reduce_sum", ReduceSum);
 }
