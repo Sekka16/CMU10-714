@@ -62,7 +62,23 @@ void Compact(const AlignedArray& a, AlignedArray* out, std::vector<int32_t> shap
    *  function will implement here, so we won't repeat this note.)
    */
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  size_t total_size = out->size;
+  // 遍历输出数组的每个元素
+  for (size_t i = 0; i < total_size; ++i) {
+    size_t tmp_i = i;
+    size_t idx = offset;  // 起始偏移量
+    
+    // 计算输入数组中的对应位置
+    for (int j = shape.size() - 1; j >= 0; --j) {
+      size_t dim_size = shape[j];
+      size_t coord = tmp_i % dim_size;  // 当前维度的坐标
+      idx += coord * strides[j];       // 累加偏移量
+      tmp_i /= dim_size;               // 移动到下一个维度
+    }
+    
+    // 复制数据到紧凑数组
+    out->ptr[i] = a.ptr[idx];
+  }
   /// END SOLUTION
 }
 
@@ -79,7 +95,23 @@ void EwiseSetitem(const AlignedArray& a, AlignedArray* out, std::vector<int32_t>
    *   offset: offset of the *out* array (not a, which has zero offset, being compact)
    */
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  size_t dim = shape.size();
+  std::vector<uint32_t> pos(dim, 0);
+  for (size_t i = 0; i < a.size; i++){
+    uint32_t idx = 0;
+    for (int j = 0; j < dim; j++)
+      idx += strides[dim - 1 - j] * pos[j];
+    out->ptr[idx + offset] = a.ptr[i];
+    pos[0] += 1;
+    // carry
+    for (int j = 0; j < dim; j++) {
+      if (pos[j] == shape[dim - 1 - j]){
+        pos[j] = 0;
+        if (j != dim - 1)
+          pos[j + 1] += 1;
+      }
+    }
+  }
   /// END SOLUTION
 }
 
@@ -100,28 +132,40 @@ void ScalarSetitem(const size_t size, scalar_t val, AlignedArray* out, std::vect
    */
 
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  for (size_t i = 0; i < size; ++i) {
+    size_t linear_idx = offset;
+    size_t remaining = i;
+    
+    // 将一维索引 i 转换为多维坐标，并计算在非紧凑数组中的实际位置
+    for (size_t dim = 0; dim < shape.size(); ++dim) {
+      const size_t coord = remaining % shape[dim];
+      linear_idx += coord * strides[dim];
+      remaining /= shape[dim];
+    }
+    
+    // 将标量值写入计算出的位置
+    out->ptr[linear_idx] = val;
+  }
   /// END SOLUTION
 }
 
-void EwiseAdd(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
-  /**
-   * Set entries in out to be the sum of correspondings entires in a and b.
-   */
-  for (size_t i = 0; i < a.size; i++) {
-    out->ptr[i] = a.ptr[i] + b.ptr[i];
-  }
-}
+// void EwiseAdd(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+//   /**
+//    * Set entries in out to be the sum of correspondings entires in a and b.
+//    */
+//   for (size_t i = 0; i < a.size; i++) {
+//     out->ptr[i] = a.ptr[i] + b.ptr[i];
+//   }
+// }
 
-void ScalarAdd(const AlignedArray& a, scalar_t val, AlignedArray* out) {
-  /**
-   * Set entries in out to be the sum of corresponding entry in a plus the scalar val.
-   */
-  for (size_t i = 0; i < a.size; i++) {
-    out->ptr[i] = a.ptr[i] + val;
-  }
-}
-
+// void ScalarAdd(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+//   /**
+//    * Set entries in out to be the sum of corresponding entry in a plus the scalar val.
+//    */
+//   for (size_t i = 0; i < a.size; i++) {
+//     out->ptr[i] = a.ptr[i] + val;
+//   }
+// }
 
 /**
  * In the code the follows, use the above template to create analogous element-wise
@@ -143,6 +187,106 @@ void ScalarAdd(const AlignedArray& a, scalar_t val, AlignedArray* out) {
  * signatures above.
  */
 
+template <typename BinaryOp>
+void EwiseCompute(const AlignedArray& a, const AlignedArray& b, AlignedArray* out, BinaryOp op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i], b.ptr[i]);
+    }
+}
+
+// 通用的一元操作模板
+template <typename UnaryOp>
+void UnaryCompute(const AlignedArray& a, AlignedArray* out, UnaryOp op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i]);
+    }
+}
+
+// 通用的标量操作模板
+template <typename BinaryOp>
+void ScalarCompute(const AlignedArray& a, scalar_t val, AlignedArray* out, BinaryOp op) {
+    for (size_t i = 0; i < a.size; i++) {
+        out->ptr[i] = op(a.ptr[i], val);
+    }
+}
+
+// 定义二元操作
+auto AddOp = [](scalar_t x, scalar_t y) { return x + y; };
+auto MulOp = [](scalar_t x, scalar_t y) { return x * y; };
+auto DivOp = [](scalar_t x, scalar_t y) {
+    if (y == 0) throw std::runtime_error("Division by zero");
+    return x / y;
+};
+auto PowerOp = [](scalar_t x, scalar_t y) { return std::pow(x, y); };
+auto MaximumOp = [](scalar_t x, scalar_t y) { return std::max(x, y); };
+auto EqOp = [](scalar_t x, scalar_t y) { return x == y ? 1.0f : 0.0f; };
+auto GeOp = [](scalar_t x, scalar_t y) { return x >= y ? 1.0f : 0.0f; };
+
+// 定义一元操作
+auto LogOp = [](scalar_t x) {
+    if (x <= 0) throw std::runtime_error("Logarithm of non-positive number");
+    return std::log(x);
+};
+auto ExpOp = [](scalar_t x) { return std::exp(x); };
+auto TanhOp = [](scalar_t x) { return std::tanh(x); };
+
+// 二元操作函数
+void EwiseAdd(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseCompute(a, b, out, AddOp);
+}
+void ScalarAdd(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarCompute(a, val, out, AddOp);
+}
+
+void EwiseMul(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseCompute(a, b, out, MulOp);
+}
+void ScalarMul(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarCompute(a, val, out, MulOp);
+}
+
+void EwiseDiv(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseCompute(a, b, out, DivOp);
+}
+void ScalarDiv(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarCompute(a, val, out, DivOp);
+}
+
+void ScalarPower(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarCompute(a, val, out, PowerOp);
+}
+
+void EwiseMaximum(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseCompute(a, b, out, MaximumOp);
+}
+void ScalarMaximum(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarCompute(a, val, out, MaximumOp);
+}
+
+void EwiseEq(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseCompute(a, b, out, EqOp);
+}
+void ScalarEq(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarCompute(a, val, out, EqOp);
+}
+
+void EwiseGe(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
+    EwiseCompute(a, b, out, GeOp);
+}
+void ScalarGe(const AlignedArray& a, scalar_t val, AlignedArray* out) {
+    ScalarCompute(a, val, out, GeOp);
+}
+
+// 一元操作函数
+void EwiseLog(const AlignedArray& a, AlignedArray* out) {
+    UnaryCompute(a, out, LogOp);
+}
+void EwiseExp(const AlignedArray& a, AlignedArray* out) {
+    UnaryCompute(a, out, ExpOp);
+}
+void EwiseTanh(const AlignedArray& a, AlignedArray* out) {
+    UnaryCompute(a, out, TanhOp);
+}
 
 void Matmul(const AlignedArray& a, const AlignedArray& b, AlignedArray* out, uint32_t m, uint32_t n,
             uint32_t p) {
@@ -288,22 +432,22 @@ PYBIND11_MODULE(ndarray_backend_cpu, m) {
   m.def("ewise_add", EwiseAdd);
   m.def("scalar_add", ScalarAdd);
 
-  // m.def("ewise_mul", EwiseMul);
-  // m.def("scalar_mul", ScalarMul);
-  // m.def("ewise_div", EwiseDiv);
-  // m.def("scalar_div", ScalarDiv);
-  // m.def("scalar_power", ScalarPower);
+  m.def("ewise_mul", EwiseMul);
+  m.def("scalar_mul", ScalarMul);
+  m.def("ewise_div", EwiseDiv);
+  m.def("scalar_div", ScalarDiv);
+  m.def("scalar_power", ScalarPower);
 
-  // m.def("ewise_maximum", EwiseMaximum);
-  // m.def("scalar_maximum", ScalarMaximum);
-  // m.def("ewise_eq", EwiseEq);
-  // m.def("scalar_eq", ScalarEq);
-  // m.def("ewise_ge", EwiseGe);
-  // m.def("scalar_ge", ScalarGe);
+  m.def("ewise_maximum", EwiseMaximum);
+  m.def("scalar_maximum", ScalarMaximum);
+  m.def("ewise_eq", EwiseEq);
+  m.def("scalar_eq", ScalarEq);
+  m.def("ewise_ge", EwiseGe);
+  m.def("scalar_ge", ScalarGe);
 
-  // m.def("ewise_log", EwiseLog);
-  // m.def("ewise_exp", EwiseExp);
-  // m.def("ewise_tanh", EwiseTanh);
+  m.def("ewise_log", EwiseLog);
+  m.def("ewise_exp", EwiseExp);
+  m.def("ewise_tanh", EwiseTanh);
 
   // m.def("matmul", Matmul);
   // m.def("matmul_tiled", MatmulTiled);
