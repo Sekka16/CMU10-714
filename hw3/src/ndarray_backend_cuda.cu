@@ -432,19 +432,29 @@ __device__ scalar_t BlockReduce(scalar_t val, Op op) {
   return block_result;
 }
 
-typename <typename Op>
-__global__ void WarpReduceKernel(const scalar_t* a, scalar_t* out, size_t size, Op op) {
+template<typename Op>
+__global__ void WarpReduceKernel(const scalar_t* a, scalar_t* out, size_t m, size_t n, Op op) {
+  const int warp = threadIdx.x / kWarpSize;
+  const int lane = threadIdx.x % kWarpSize;
+  const int warp_nums = blockDim.x / kWarpSize;
 
+  for (int row_start = blockIdx.x * warp_nums; row_start < m; row_start += gridDim.x * warp_nums) {
+    const int row = row_start + warp;
+    if (row < m) {
+      scalar_t res = Op::identity();
+      for (int col_start = lane; col_start < n; col_start += kWarpSize) {
+        scalar_t val = a[row * n + col_start];
+        res = op(res, val);
+      } 
+      res = WarpReduce(res, op);
+      if (lane == 0) out[row] = res;
+    }
+  }
 }
 
 template <typename Op>
 __global__ void BlockReduceKernel(const scalar_t* a, scalar* out, size_t size, Op op) {
 
-}
-
-template <typename Op>
-__global__ void NaiveReduceKernel(const scalar_t* a, scalar* out, size_t size, Op op) {
-  
 }
 
 void ReduceMax(const CudaArray& a, CudaArray* out, size_t reduce_size) {
