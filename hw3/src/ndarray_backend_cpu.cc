@@ -92,22 +92,19 @@ void EwiseSetitem(const AlignedArray& a, AlignedArray* out, std::vector<int32_t>
    *   offset: offset of the *out* array (not a, which has zero offset, being compact)
    */
   /// BEGIN SOLUTION
-  size_t dim = shape.size();
-  std::vector<uint32_t> pos(dim, 0);
-  for (size_t i = 0; i < a.size; i++){
-    uint32_t idx = 0;
-    for (int j = 0; j < dim; j++)
-      idx += strides[dim - 1 - j] * pos[j];
-    out->ptr[idx + offset] = a.ptr[i];
-    pos[0] += 1;
-    // carry
-    for (int j = 0; j < dim; j++) {
-      if (pos[j] == shape[dim - 1 - j]){
-        pos[j] = 0;
-        if (j != dim - 1)
-          pos[j + 1] += 1;
-      }
+  size_t total_size = a.size;
+  for (size_t i = 0; i < total_size; i++) {
+    size_t tmp_i = i;
+    size_t idx = offset;
+
+    for (int j = shape.size() - 1; j >= 0; --j) {
+      size_t dim_size = shape[j];
+      size_t coord = tmp_i % dim_size;
+      idx += coord * strides[j];
+      tmp_i /= dim_size;
     }
+
+    out->ptr[idx] = a.ptr[i];
   }
   /// END SOLUTION
 }
@@ -143,24 +140,6 @@ void ScalarSetitem(const size_t size, scalar_t val, AlignedArray* out, std::vect
   }
   /// END SOLUTION
 }
-
-// void EwiseAdd(const AlignedArray& a, const AlignedArray& b, AlignedArray* out) {
-//   /**
-//    * Set entries in out to be the sum of correspondings entires in a and b.
-//    */
-//   for (size_t i = 0; i < a.size; i++) {
-//     out->ptr[i] = a.ptr[i] + b.ptr[i];
-//   }
-// }
-
-// void ScalarAdd(const AlignedArray& a, scalar_t val, AlignedArray* out) {
-//   /**
-//    * Set entries in out to be the sum of corresponding entry in a plus the scalar val.
-//    */
-//   for (size_t i = 0; i < a.size; i++) {
-//     out->ptr[i] = a.ptr[i] + val;
-//   }
-// }
 
 /**
  * In the code the follows, use the above template to create analogous element-wise
