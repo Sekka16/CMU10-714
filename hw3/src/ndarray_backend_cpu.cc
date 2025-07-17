@@ -63,20 +63,17 @@ void Compact(const AlignedArray& a, AlignedArray* out, std::vector<int32_t> shap
    */
   /// BEGIN SOLUTION
   size_t total_size = out->size;
-  // 遍历输出数组的每个元素
   for (size_t i = 0; i < total_size; ++i) {
     size_t tmp_i = i;
-    size_t idx = offset;  // 起始偏移量
+    size_t idx = offset;  
     
-    // 计算输入数组中的对应位置
     for (int j = shape.size() - 1; j >= 0; --j) {
       size_t dim_size = shape[j];
-      size_t coord = tmp_i % dim_size;  // 当前维度的坐标
-      idx += coord * strides[j];       // 累加偏移量
-      tmp_i /= dim_size;               // 移动到下一个维度
+      size_t coord = tmp_i % dim_size;  
+      idx += coord * strides[j];       
+      tmp_i /= dim_size;               
     }
     
-    // 复制数据到紧凑数组
     out->ptr[i] = a.ptr[idx];
   }
   /// END SOLUTION
@@ -136,14 +133,12 @@ void ScalarSetitem(const size_t size, scalar_t val, AlignedArray* out, std::vect
     size_t linear_idx = offset;
     size_t remaining = i;
     
-    // 将一维索引 i 转换为多维坐标，并计算在非紧凑数组中的实际位置
     for (size_t dim = 0; dim < shape.size(); ++dim) {
       const size_t coord = remaining % shape[dim];
       linear_idx += coord * strides[dim];
       remaining /= shape[dim];
     }
     
-    // 将标量值写入计算出的位置
     out->ptr[linear_idx] = val;
   }
   /// END SOLUTION
@@ -373,7 +368,22 @@ void MatmulTiled(const AlignedArray& a, const AlignedArray& b, AlignedArray* out
    *
    */
   /// BEGIN SOLUTION
+  for (uint32_t i = 0; i < m / TILE; i++) {
+    for (uint32_t j = 0; j < p / TILE; j++) {
+      scalar_t* out_tile = out->ptr + (i * (p / TILE) + j) * TILE * TILE;
 
+      for (uint32_t t = 0; t < TILE * TILE; t++) {
+        out_tile[t] = 0;
+      }
+
+      for (uint32_t k = 0; k < n / TILE; k++) {
+        const scalar_t* a_tile = a.ptr + (i * (n / TILE) + k) * TILE * TILE;
+        const scalar_t* b_tile = b.ptr + (k * (p / TILE) + j) * TILE * TILE;
+
+        AlignedDot(a_tile, b_tile, out_tile);  // 累加到 out_tile 上
+      }
+    }
+  }
   /// END SOLUTION
 }
 
