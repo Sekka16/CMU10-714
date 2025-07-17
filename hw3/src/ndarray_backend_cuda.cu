@@ -107,7 +107,7 @@ __global__ void CompactKernel(const scalar_t* a, scalar_t* out, size_t size, Cud
     cur_gid /= dim_size;
   }
   if (gid < size)  
-    output[gid] = a[idx];
+    out[gid] = a[idx];
   /// END SOLUTION
 }
 
@@ -148,7 +148,7 @@ __global__ void EwiseSetitemKernel(const scalar_t* a, scalar_t* out, size_t size
     cur_gid /= dim_size;
   }
   if (gid < size)  
-    output[idx] = a[gid];
+    out[idx] = a[gid];
 }
 
 void EwiseSetitem(const CudaArray& a, CudaArray* out, std::vector<int32_t> shape,
@@ -183,7 +183,7 @@ __global__ void ScalarSetitemKernel(size_t size, scalar_t val, scalar_t* out, Cu
     cur_gid /= dim_size;
   }
   if (gid < size)  
-    output[idx] = val;  
+    out[idx] = val;  
 }
 
 void ScalarSetitem(size_t size, scalar_t val, CudaArray* out, std::vector<int32_t> shape,
@@ -224,14 +224,14 @@ __global__ void ScalarBinaryKernel(const scalar_t* a, scalar_t val, scalar_t* ou
 }
 
 template <typename UnaryOp>
-__device__ void EwiseUnaryKernel(const scalar* a, scalar_t* out, size_t size, UnaryOp op) {
+__global__ void EwiseUnaryKernel(const scalar_t* a, scalar_t* out, size_t size, UnaryOp op) {
   size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   if (gid < size) out[gid] = op(a[gid]);
 }
 
 struct AddOp {
   __device__ scalar_t operator()(scalar_t x, scalar_t y) const { return x + y; }
-  static constexpr scalar_t identity() { return 0.0f; }
+  static __device__ constexpr scalar_t identity() { return 0.0f; }
 };
 
 struct MulOp {
@@ -248,14 +248,14 @@ struct PowerOp {
 
 struct MaximumOp {
   __device__ scalar_t operator()(scalar_t x, scalar_t y) const { return max(x, y); }
-  static constexpr scalar_t identity() { return -FLT_MAX; }  
+  static __device__ constexpr scalar_t identity() { return 0xFF800000; }  
 };
 
 struct EqOp {
   __device__ scalar_t operator()(scalar_t x, scalar_t y) const { return (x == y) ? 1.0f : 0.0f; }
 };
 
-struct Geop {
+struct GeOp {
   __device__ scalar_t operator()(scalar_t x, scalar_t y) const { return (x >= y) ? 1.0f : 0.0f; }
 };
 
@@ -273,72 +273,82 @@ struct TanhOp {
 
 void EwiseAdd(const CudaArray& a, const CudaArray& b, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, AddOp);
+  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, AddOp{});
 }
 
 void ScalarAdd(const CudaArray& a, scalar_t val, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, AddOp);
+  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, AddOp{});
+}
+
+void EwiseDiv(const CudaArray& a, const CudaArray& b, CudaArray* out)  {
+  CudaDims dim = CudaOneDim(out->size);
+  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, DivOp{});
+}
+
+void ScalarDiv(const CudaArray& a, scalar_t val, CudaArray* out) {
+  CudaDims dim = CudaOneDim(out->size);
+  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, DivOp{});
 }
 
 void EwiseMul(const CudaArray& a, const CudaArray& b, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, MulOp);
+  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, MulOp{});
 }
 
 void ScalarMul(const CudaArray& a, scalar_t val, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, MulOp);
+  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, MulOp{});
 }
 
 void ScalarPower(const CudaArray& a, scalar_t val, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, PowerOp);
+  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, PowerOp{});
 }
 
 void EwiseMaximum(const CudaArray& a, const CudaArray& b, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, MaximumOp);
+  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, MaximumOp{});
 }
 
 void ScalarMaximum(const CudaArray& a, scalar_t val, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, MaximumOp);
+  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, MaximumOp{});
 }
 
 void EwiseEq(const CudaArray& a, const CudaArray& b, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, EqOp);
+  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, EqOp{});
 }
 
 void ScalarEq(const CudaArray& a, scalar_t val, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, EqOp);
+  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, EqOp{});
 }
 
 void EwiseGe(const CudaArray& a, const CudaArray& b, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, GeOp);
+  EwiseBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, b.ptr, out->ptr, out->size, GeOp{});
 }
 
 void ScalarGe(const CudaArray& a, scalar_t val, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, GeOp);
+  ScalarBinaryKernel<<<dim.grid, dim.block>>>(a.ptr, val, out->ptr, out->size, GeOp{});
 }
 
 void EwiseLog(const CudaArray& a, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseUnaryKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, LogOp);
+  EwiseUnaryKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, LogOp{});
 }
 
 void EwiseExp(const CudaArray& a, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseUnaryKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, ExpOp);
+  EwiseUnaryKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, ExpOp{});
 }
 
 void EwiseTanh(const CudaArray& a, CudaArray* out) {
   CudaDims dim = CudaOneDim(out->size);
-  EwiseUnaryKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, TanhOp);
+  EwiseUnaryKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, TanhOp{});
 }
 
 /**
@@ -363,8 +373,12 @@ void EwiseTanh(const CudaArray& a, CudaArray* out) {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Elementwise and scalar operations
+// Matmul operations
 ////////////////////////////////////////////////////////////////////////////////
+
+__global__ void MatmulKernel(scalar_t* a, scalar_t* b, scalar_t* out, uint32_t M, uint32_t N, uint32_t P) {
+  return;
+}
 
 
 void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, uint32_t N,
@@ -392,16 +406,14 @@ void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, 
    */
 
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  
   /// END SOLUTION
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Max and sum reductions
 ////////////////////////////////////////////////////////////////////////////////
-
 constexpr size_t kWarpSize = 32;
-using BLOCK_SIZE = BASE_THREAD_NUM;
 
 template<typename Op>
 __device__ scalar_t WarpReduce(scalar_t val, Op op) {
@@ -413,7 +425,7 @@ __device__ scalar_t WarpReduce(scalar_t val, Op op) {
 
 template<typename Op>
 __device__ scalar_t BlockReduce(scalar_t val, Op op) {
-  const int NUM_WARPS = (BLOCK_SIZE + kWarpSize - 1) / kWarpSize;
+  const int NUM_WARPS = (BASE_THREAD_NUM + kWarpSize - 1) / kWarpSize;
   __shared__ scalar_t shared[NUM_WARPS];
   __shared__ scalar_t block_result;
 
@@ -432,19 +444,24 @@ __device__ scalar_t BlockReduce(scalar_t val, Op op) {
   return block_result;
 }
 
-typename <typename Op>
-__global__ void WarpReduceKernel(const scalar_t* a, scalar_t* out, size_t size, Op op) {
+template<typename Op>
+__global__ void WarpReduceKernel(const scalar_t* a, scalar_t* out, size_t m, size_t n, Op op) {
+  const int warp = threadIdx.x / kWarpSize;
+  const int lane = threadIdx.x % kWarpSize;
+  const int warp_nums = blockDim.x / kWarpSize;
 
-}
-
-template <typename Op>
-__global__ void BlockReduceKernel(const scalar_t* a, scalar* out, size_t size, Op op) {
-
-}
-
-template <typename Op>
-__global__ void NaiveReduceKernel(const scalar_t* a, scalar* out, size_t size, Op op) {
-  
+  for (int row_start = blockIdx.x * warp_nums; row_start < m; row_start += gridDim.x * warp_nums) {
+    const int row = row_start + warp;
+    if (row < m) {
+      scalar_t res = Op::identity();
+      for (int col_start = lane; col_start < n; col_start += kWarpSize) {
+        scalar_t val = a[row * n + col_start];
+        res = op(res, val);
+      } 
+      res = WarpReduce(res, op);
+      if (lane == 0) out[row] = res;
+    }
+  }
 }
 
 void ReduceMax(const CudaArray& a, CudaArray* out, size_t reduce_size) {
@@ -458,7 +475,11 @@ void ReduceMax(const CudaArray& a, CudaArray* out, size_t reduce_size) {
    *   redice_size: size of the dimension to reduce over
    */
   /// BEGIN SOLUTION
-
+  CudaDims dim;
+  const int rows_per_block = BASE_THREAD_NUM / kWarpSize;
+  dim.grid = (out->size + rows_per_block - 1) / rows_per_block;
+  dim.block = BASE_THREAD_NUM;
+  WarpReduceKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, a.size, reduce_size, MaximumOp{});
   /// END SOLUTION
 }
 
@@ -471,10 +492,14 @@ void ReduceSum(const CudaArray& a, CudaArray* out, size_t reduce_size) {
    * Args:
    *   a: compact array of size a.size = out.size * reduce_size to reduce over
    *   out: compact array to write into
-   *   redice_size: size of the dimension to reduce over
+   *   reduce_size: size of the dimension to reduce over
    */
   /// BEGIN SOLUTION
-  assert(false && "Not Implemented");
+  CudaDims dim;
+  const int rows_per_block = BASE_THREAD_NUM / kWarpSize;
+  dim.grid = (out->size + rows_per_block - 1) / rows_per_block;
+  dim.block = BASE_THREAD_NUM;
+  WarpReduceKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, a.size, reduce_size, AddOp{});
   /// END SOLUTION
 }
 
@@ -543,7 +568,7 @@ PYBIND11_MODULE(ndarray_backend_cuda, m) {
   m.def("ewise_exp", EwiseExp);
   m.def("ewise_tanh", EwiseTanh);
 
-  // m.def("matmul", Matmul);
+  m.def("matmul", Matmul);
 
   m.def("reduce_max", ReduceMax);
   m.def("reduce_sum", ReduceSum);
