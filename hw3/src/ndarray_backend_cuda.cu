@@ -375,7 +375,17 @@ void EwiseTanh(const CudaArray& a, CudaArray* out) {
 ////////////////////////////////////////////////////////////////////////////////
 
 __global__ void MatmulKernel(scalar_t* a, scalar_t* b, scalar_t* out, uint32_t M, uint32_t N, uint32_t P) {
-  return;
+  // Compute the row and column indices for the output matrix
+  uint32_t row = blockIdx.y * blockDim.y + threadIdx.y;
+  uint32_t col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < M && col < P) {
+    scalar_t value = 0;
+    for (uint32_t k = 0; k < N; ++k) {
+      value += a[row * N + k] * b[k * P + col];
+    }
+    out[row * P + col] = value;
+  }
 }
 
 
@@ -404,7 +414,9 @@ void Matmul(const CudaArray& a, const CudaArray& b, CudaArray* out, uint32_t M, 
    */
 
   /// BEGIN SOLUTION
-  
+  dim3 block(TILE, TILE);
+  dim3 grid((P + TILE - 1) / TILE, (M + TILE - 1) / TILE);
+  MatmulKernel<<<grid, block>>>(a.ptr, b.ptr, out->ptr, M, N, P);
   /// END SOLUTION
 }
 
