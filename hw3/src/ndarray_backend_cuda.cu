@@ -1,4 +1,5 @@
 #include <cuda_runtime.h>
+#include <math_functions.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -79,8 +80,6 @@ void Fill(CudaArray* out, scalar_t val) {
 
 // Untility function to convert contiguous index i to memory location from strides
 
-
-
 __global__ void CompactKernel(const scalar_t* a, scalar_t* out, size_t size, CudaVec shape,
                               CudaVec strides, size_t offset) {
   /**
@@ -106,8 +105,7 @@ __global__ void CompactKernel(const scalar_t* a, scalar_t* out, size_t size, Cud
     idx += coord * strides.data[i];
     cur_gid /= dim_size;
   }
-  if (gid < size)  
-    out[gid] = a[idx];
+  if (gid < size) out[gid] = a[idx];
   /// END SOLUTION
 }
 
@@ -147,8 +145,8 @@ __global__ void EwiseSetitemKernel(const scalar_t* a, scalar_t* out, size_t size
     idx += coord * strides.data[i];
     cur_gid /= dim_size;
   }
-  if (gid < size)  
-    out[idx] = a[gid];
+  if (gid < size) out[idx] = a[gid];
+  /// END SOLUTION
 }
 
 void EwiseSetitem(const CudaArray& a, CudaArray* out, std::vector<int32_t> shape,
@@ -165,8 +163,8 @@ void EwiseSetitem(const CudaArray& a, CudaArray* out, std::vector<int32_t> shape
    *   offset: offset of the *out* array (not a, which has zero offset, being compact)
    */
   /// BEGIN SOLUTION
-  CudaDims dim = CudaOneDim(out->size);
-  EwiseSetitemKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, VecToCuda(shape), 
+  CudaDims dim = CudaOneDim(a.size);
+  EwiseSetitemKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, a.size, VecToCuda(shape),
                                               VecToCuda(strides), offset);
   /// END SOLUTION
 }
@@ -231,7 +229,7 @@ __global__ void EwiseUnaryKernel(const scalar_t* a, scalar_t* out, size_t size, 
 
 struct AddOp {
   __device__ scalar_t operator()(scalar_t x, scalar_t y) const { return x + y; }
-  static __device__ constexpr scalar_t identity() { return 0.0f; }
+  static __device__ scalar_t identity() { return 0.0f; }
 };
 
 struct MulOp {
@@ -248,7 +246,7 @@ struct PowerOp {
 
 struct MaximumOp {
   __device__ scalar_t operator()(scalar_t x, scalar_t y) const { return max(x, y); }
-  static __device__ constexpr scalar_t identity() { return 0xFF800000; }  
+  static __device__ scalar_t identity() { return __int_as_float(0xFF800000); }
 };
 
 struct EqOp {
