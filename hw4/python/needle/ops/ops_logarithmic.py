@@ -29,12 +29,34 @@ class LogSumExp(TensorOp):
 
     def compute(self, Z):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        max_z = Z.max(self.axes, keepdims=True)
+        max_z_reduce = Z.max(self.axes)
+        return array_api.log(array_api.sum(array_api.exp(Z - max_z.broadcast_to(Z.shape)), self.axes)) + max_z_reduce
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        Z = node.inputs[0]
+        max_Z = array_api.maximum(Z.cached_data, axis=self.axes)
+        exp_val = array_api.exp(Z - Tensor(max_Z))
+        sum_val = summation(exp_val, axes=self.axes)
+
+        log_grad = out_grad / sum_val
+        
+        #下面就是sum那部分的导数，和之前的summation算子是一样的
+        input_shape = node.inputs[0].shape
+        final_shape = list(input_shape)
+        if self.axes:
+          if isinstance(self.axes, int):
+              final_shape[self.axes] = 1
+          else:
+              for dim in self.axes:
+                  final_shape[dim] = 1
+        else:
+            final_shape = [1 for _ in range(len(final_shape))]
+        sum_grad = reshape(log_grad, tuple(final_shape))
+        sum_grad_b = broadcast_to(sum_grad, Z.shape)
+        return exp_val * sum_grad_b
         ### END YOUR SOLUTION
 
 

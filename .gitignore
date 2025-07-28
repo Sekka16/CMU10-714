@@ -1,10 +1,12 @@
-# 递归忽略所有层级的Python缓存文件
-**/__pycache__/
-**/*.pyc
-**/*.pyo
-**/*.pyd
-**/*.so
-**/build/
+# Python缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# 构建目录
+build/
 
 # Jupyter Notebook 元数据
-**/.ipynb_checkpoints/
+.ipynb_checkpoints/

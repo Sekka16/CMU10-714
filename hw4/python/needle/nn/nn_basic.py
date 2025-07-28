@@ -6,7 +6,6 @@ from needle import ops
 import needle.init as init
 import numpy as np
 
-
 class Parameter(Tensor):
     """A special kind of tensor that represents parameters."""
 
@@ -107,7 +106,7 @@ class Flatten(Module):
 class ReLU(Module):
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return ops.relu(x)
         ### END YOUR SOLUTION
 
 class Sequential(Module):

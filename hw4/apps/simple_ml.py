@@ -37,7 +37,16 @@ def parse_mnist(image_filesname, label_filename):
                 for MNIST will contain the values 0-9.
     """
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    with gzip.open(image_filename, "rb") as image, gzip.open(label_filename, "rb") as label:
+      image_magic, image_number, image_rows, image_cols = struct.unpack(">IIII", image.read(16))
+      image_pixels = struct.unpack("B" * (image_number * image_rows * image_cols), image.read())
+      image_pixels_array = np.array(image_pixels, dtype=np.float32).reshape(image_number, image_rows * image_cols) / 255.0
+        
+      label_magic, label_number = struct.unpack(">II", label.read(8))
+      label_values = struct.unpack("B" * label_number, label.read())
+      label_values_array = np.array(label_values, dtype=np.uint8)
+
+    return image_pixels_array, label_values_array
     ### END YOUR SOLUTION
 
 
@@ -58,7 +67,10 @@ def softmax_loss(Z, y_one_hot):
         Average softmax loss over the sample. (ndl.Tensor[np.float32])
     """
     ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
+    batch_size = Z.shape[0]
+    logsumexp = ndl.ops.logsumexp(Z, axes=1)
+    true_class_logits = (Z * y_one_hot).sum(axis=1)
+    return (logsumexp - true_class_logits).sum() / batch_size
     ### END YOUR SOLUTION
 
 

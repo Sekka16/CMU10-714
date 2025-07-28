@@ -20,7 +20,9 @@ class RandomFlipHorizontal(Transform):
         """
         flip_img = np.random.rand() < self.p
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        if flip_img:
+            img = np.fliplr(img)
+        return img
         ### END YOUR SOLUTION
 
 
@@ -38,5 +40,9 @@ class RandomCrop(Transform):
         """
         shift_x, shift_y = np.random.randint(low=-self.padding, high=self.padding+1, size=2)
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        pad_width = ((self.padding, self.padding), (self.padding, self.padding), (0, 0))
+        img_pad = np.pad(img, pad_width=pad_width, mode='constant', constant_values=0)
+        H, W, C = img.shape
+        img_crop = img_pad[self.padding+shift_x:self.padding+H+shift_x, self.padding+shift_y:self.padding+W+shift_y, :]
+        return img_crop
         ### END YOUR SOLUTION
