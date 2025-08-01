@@ -247,16 +247,30 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        if prod(self.shape) != prod(new_shape):
-            raise ValueError("Cannot reshape array: total size does not match")
-        # Reshape only allowed on compact arrays
         if not self.is_compact():
-            raise ValueError("Cannot reshape non-compact array")   
+            raise ValueError("Cannot reshape non-compact array")
 
-        new_strides = self.compact_strides(new_shape)
+        size = prod(self.shape)
+        shape = list(new_shape)
+
+        # 处理 -1：推断其值
+        if shape.count(-1) > 1:
+            raise ValueError("Only one dimension can be -1")
+        if -1 in shape:
+            known = 1
+            for dim in shape:
+                if dim != -1:
+                    known *= dim
+            if size % known != 0:
+                raise ValueError("Cannot infer dimension: size mismatch")
+            shape[shape.index(-1)] = size // known
+
+        if prod(shape) != size:
+            raise ValueError("Cannot reshape array: total size does not match")
+
         return NDArray.make(
-            new_shape,
-            strides=new_strides,
+            tuple(shape),
+            strides=self.compact_strides(tuple(shape)),
             device=self.device,
             handle=self._handle,
             offset=self._offset,
@@ -627,7 +641,14 @@ class NDArray:
         Note: compact() before returning.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_strides = list(self.strides)
+        for axis in axes:
+            new_strides[axis] = - new_strides[axis]
+        new_strides = tuple(new_strides)
+        new_offset = 0
+        for axis in axes:
+            new_offset += (self.shape[axis] - 1) * self.strides[axis]
+        return NDArray.make(self.shape, new_strides, self._device, self._handle, new_offset).compact()
         ### END YOUR SOLUTION
 
     def pad(self, axes):
@@ -637,7 +658,12 @@ class NDArray:
         axes = ( (0, 0), (1, 1), (0, 0)) pads the middle axis with a 0 on the left and right side.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        assert len(axes) == len(self.shape)
+        new_shape = tuple(s + a[0] + a[1] for s, a in zip(self.shape, axes))
+        out = full(new_shape, 0.0, device=self.device)
+        out_slice = tuple(slice(a[0], a[0] + s) for s, a in zip(self.shape, axes))
+        out[out_slice] = self.compact()
+        return out
         ### END YOUR SOLUTION
 
 def array(a, dtype="float32", device=None):

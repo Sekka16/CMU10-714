@@ -9,6 +9,15 @@
 namespace needle {
 namespace cuda {
 
+#define CHECK_CUDA(call) do { \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        std::cerr << "CUDA Error at " << __FILE__ << ":" << __LINE__ << ": " \
+                  << cudaGetErrorString(err) << std::endl; \
+        throw std::runtime_error("CUDA operation failed"); \
+    } \
+} while(0)
+
 #define BASE_THREAD_NUM 256
 
 #define TILE 4
@@ -433,27 +442,6 @@ __device__ scalar_t WarpReduce(scalar_t val, Op op) {
 }
 
 template<typename Op>
-__device__ scalar_t BlockReduce(scalar_t val, Op op) {
-  const int NUM_WARPS = (BASE_THREAD_NUM + kWarpSize - 1) / kWarpSize;
-  __shared__ scalar_t shared[NUM_WARPS];
-  __shared__ scalar_t block_result;
-
-  const int lane = threadIdx.x % kWarpSize;
-  const int warp = threadIdx.x / kWarpSize;
-
-  val = WarpReduce(val, op);
-  if (lane == 0) shared[warp] = val;
-  __syncthreads();
-
-  if (warp == 0) {
-    scalar_t result = (lane < NUM_WARPS) ? shared[lane] : Op::identity();
-    val = WarpReduce(result, op);
-    if (lane == 0) { block_result = val; }
-  }
-  return block_result;
-}
-
-template<typename Op>
 __global__ void WarpReduceKernel(const scalar_t* a, scalar_t* out, size_t m, size_t n, Op op) {
   const int warp = threadIdx.x / kWarpSize;
   const int lane = threadIdx.x % kWarpSize;
@@ -464,9 +452,12 @@ __global__ void WarpReduceKernel(const scalar_t* a, scalar_t* out, size_t m, siz
     if (row < m) {
       scalar_t res = Op::identity();
       for (int col_start = lane; col_start < n; col_start += kWarpSize) {
-        scalar_t val = a[row * n + col_start];
-        res = op(res, val);
-      } 
+        size_t idx = row * n + col_start;
+        if (idx < m * n) {
+          scalar_t val = a[idx];
+          res = op(res, val);
+        }
+      }
       res = WarpReduce(res, op);
       if (lane == 0) out[row] = res;
     }
@@ -489,7 +480,7 @@ void ReduceMax(const CudaArray& a, CudaArray* out, size_t reduce_size) {
   const int rows_per_block = BASE_THREAD_NUM / kWarpSize;
   dim.grid = (out->size + rows_per_block - 1) / rows_per_block;
   dim.block = BASE_THREAD_NUM;
-  WarpReduceKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, a.size, reduce_size, MaximumOp{});
+  WarpReduceKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, reduce_size, MaximumOp{});
   /// END SOLUTION
 }
 
@@ -510,7 +501,7 @@ void ReduceSum(const CudaArray& a, CudaArray* out, size_t reduce_size) {
   const int rows_per_block = BASE_THREAD_NUM / kWarpSize;
   dim.grid = (out->size + rows_per_block - 1) / rows_per_block;
   dim.block = BASE_THREAD_NUM;
-  WarpReduceKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, a.size, reduce_size, AddOp{});
+  WarpReduceKernel<<<dim.grid, dim.block>>>(a.ptr, out->ptr, out->size, reduce_size, AddOp{});
   /// END SOLUTION
 }
 

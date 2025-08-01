@@ -25,7 +25,14 @@ class SGD(Optimizer):
 
     def step(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        for param in self.params:
+            if param.grad == None:
+              continue
+            grad_data = ndl.Tensor(param.grad.data + self.weight_decay * param.data, dtype=param.dtype)
+            if param not in self.u:
+              self.u[param] = 0
+            self.u[param] = self.momentum * self.u[param] + (1 - self.momentum) * grad_data 
+            param.data = param.data - self.lr * self.u[param]
         ### END YOUR SOLUTION
 
     def clip_grad_norm(self, max_norm=0.25):
@@ -60,5 +67,22 @@ class Adam(Optimizer):
 
     def step(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # print('2 global tensors', ndl.autograd.TENSOR_COUNTER)
+        self.t += 1
+        for param in self.params:
+            deltaf = param.grad.data + self.weight_decay * param.data
+            u_t = self.beta1 * self.m.get(param, 0) + (1 - self.beta1) * deltaf
+            # u_t = ndl.Tensor(u_t, dtype=param.dtype)
+            self.m[param] = u_t
+            v_t = self.beta2 * self.v.get(param, 0) + (1 - self.beta2) * (deltaf ** 2)
+            # v_t = ndl.Tensor(v_t, dtype=param.dtype)
+            self.v[param] = v_t
+            
+            unbiased_u = self.m[param] / (1 - self.beta1 ** self.t)
+            unbiased_v = self.v[param] / (1 - self.beta2 ** self.t)
+            update = self.lr * unbiased_u.data / (unbiased_v.data ** 0.5 + self.eps)
+            update = ndl.Tensor(update, dtype=param.dtype)
+            # print(update)
+            param.data -= update.data
+        # print('3 global tensors', ndl.autograd.TENSOR_COUNTER)
         ### END YOUR SOLUTION

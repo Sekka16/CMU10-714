@@ -31,32 +31,25 @@ class LogSumExp(TensorOp):
         ### BEGIN YOUR SOLUTION
         max_z = Z.max(self.axes, keepdims=True)
         max_z_reduce = Z.max(self.axes)
-        return array_api.log(array_api.sum(array_api.exp(Z - max_z.broadcast_to(Z.shape)), self.axes)) + max_z_reduce
+        return (Z - max_z.broadcast_to(Z.shape)).exp().sum(self.axes).log() + max_z_reduce
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        Z = node.inputs[0]
-        max_Z = array_api.maximum(Z.cached_data, axis=self.axes)
-        exp_val = array_api.exp(Z - Tensor(max_Z))
-        sum_val = summation(exp_val, axes=self.axes)
-
-        log_grad = out_grad / sum_val
+        z = node.inputs[0]
+        max_z = Tensor(z.realize_cached_data().max(axis=self.axes, keepdims=True), device=z.device)
+        exp_z = exp(z - max_z.broadcast_to(z.shape))
+        sum_exp_z = summation(exp_z, self.axes)
+        grad_sum_exp_z = out_grad / sum_exp_z
+        expand_shape = list(z.shape)
+        axes = range(len(expand_shape)) if self.axes is None else self.axes
+        if isinstance(axes, Number):
+            axes=(axes,)
+        for axis in axes:
+            expand_shape[axis] = 1
+        grad_exp_z = grad_sum_exp_z.reshape(expand_shape).broadcast_to(z.shape)
         
-        #下面就是sum那部分的导数，和之前的summation算子是一样的
-        input_shape = node.inputs[0].shape
-        final_shape = list(input_shape)
-        if self.axes:
-          if isinstance(self.axes, int):
-              final_shape[self.axes] = 1
-          else:
-              for dim in self.axes:
-                  final_shape[dim] = 1
-        else:
-            final_shape = [1 for _ in range(len(final_shape))]
-        sum_grad = reshape(log_grad, tuple(final_shape))
-        sum_grad_b = broadcast_to(sum_grad, Z.shape)
-        return exp_val * sum_grad_b
+        return grad_exp_z * exp_z
         ### END YOUR SOLUTION
 
 

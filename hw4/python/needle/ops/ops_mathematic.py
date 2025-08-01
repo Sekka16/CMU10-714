@@ -175,6 +175,20 @@ class Transpose(TensorOp):
 def transpose(a, axes=None):
     return Transpose(axes)(a)
 
+class Permute(TensorOp):
+    def __init__(self, axes: Optional[tuple] = None):
+        self.axes = axes
+
+    def compute(self, a):
+        ### BEGIN YOUR SOLUTION
+        return a.permute(self.axes)
+        ### END YOUR SOLUTION
+
+    def gradient(self, out_grad, node):
+        ### BEGIN YOUR SOLUTION
+        return out_grad.permute(node.inputs[0].axes)
+        ### END YOUR SOLUTION
+
 
 class Reshape(TensorOp):
     def __init__(self, shape):
@@ -182,7 +196,7 @@ class Reshape(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return a.reshape(self.shape)
+        return a.compact().reshape(self.shape)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
@@ -196,36 +210,93 @@ def reshape(a, shape):
     return Reshape(shape)(a)
 
 
+# class BroadcastTo(TensorOp):
+#     def __init__(self, shape):
+#         self.shape = shape
+
+#     def compute(self, a):
+#         ### BEGIN YOUR SOLUTION
+#         return a.broadcast_to(self.shape)
+#         ### END YOUR SOLUTION
+
+#     def gradient(self, out_grad, node):
+#         ### BEGIN YOUR SOLUTION
+#         origin_shape = node.inputs[0].shape
+#         output_shape = out_grad.shape
+#         # 我们用axes记录发生了广播的维度，在这些维度上做summation
+#         axes = []
+#         idx = len(origin_shape) - 1
+#         for i in range(len(output_shape) - 1, -1, -1):
+#           if idx < 0:
+#             axes.append(i)
+#             continue
+#           if output_shape[i] != origin_shape[idx]:
+#             axes.append(i)
+#           idx -= 1
+#         out_grad.sum(tuple(axes))
+#         return reshape(out_grad, origin_shape)
+#         ### END YOUR SOLUTION
+
+
+# def broadcast_to(a, shape):
+#     return BroadcastTo(shape)(a)
 class BroadcastTo(TensorOp):
     def __init__(self, shape):
         self.shape = shape
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return a.broadcast_to(self.shape)
+        if a.shape == self.shape:
+            return a
+        return array_api.broadcast_to(a, self.shape).compact()
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
         origin_shape = node.inputs[0].shape
-        output_shape = out_grad.shape
-        # 我们用axes记录发生了广播的维度，在这些维度上做summation
-        axes = []
-        idx = len(origin_shape) - 1
-        for i in range(len(output_shape) - 1, -1, -1):
-          if idx < 0:
-            axes.append(i)
-            continue
-          if output_shape[i] != origin_shape[idx]:
-            axes.append(i)
-          idx -= 1
-        out_grad.sum(tuple(axes))
-        return reshape(out_grad, origin_shape)
+        if origin_shape == self.shape:
+            return out_grad
+
+        shrink_dims = [i for i in range(len(self.shape))]
+        # iterate from the back because it could be len(ori_shape) < len(self.shape)
+        for i, (ori, cur) in enumerate(zip(reversed(origin_shape), reversed(self.shape))):
+            if ori == cur:
+                shrink_dims[len(self.shape) - i - 1] = -1
+        shrink_dims = tuple(filter(lambda x: x >= 0, shrink_dims))
+        assert len(shrink_dims) > 0
+
+        return out_grad.sum(shrink_dims).reshape(origin_shape)
         ### END YOUR SOLUTION
 
 
 def broadcast_to(a, shape):
     return BroadcastTo(shape)(a)
+
+# class Summation(TensorOp):
+#     def __init__(self, axes: Optional[tuple] = None):
+#         self.axes = axes
+
+#     def compute(self, a):
+#         ### BEGIN YOUR SOLUTION
+#         return a.sum(self.axes)
+#         ### END YOUR SOLUTION
+
+#     def gradient(self, out_grad, node):
+#         ### BEGIN YOUR SOLUTION
+#         # 我们需要将维度扩张到原先的维度，再在对应的维度上做广播
+#         # 举例来说：(3,4,5)->(3,5)，那么我们需要(3,5)->(3,1,5)->(3,4,5)
+#         input_shape = node.inputs[0].shape
+#         axes = self.axes
+#         if axes is None:
+#             reshape_shape = [1] * len(input_shape)
+#         else:
+#             if isinstance(axes, int):
+#                 axes = (axes,)
+#             reshape_shape = list(input_shape)
+#             for ax in axes:
+#                 reshape_shape[ax] = 1
+#         return out_grad.reshape(tuple(reshape_shape)).broadcast_to(input_shape)
+#         ### END YOUR SOLUTION
 
 
 class Summation(TensorOp):
@@ -234,26 +305,32 @@ class Summation(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        return a.sum(self.axes)
+        if isinstance(self.axes, (list, tuple)) and len(self.axes) > 1:
+            # multiple axes case, avoid "AssertionError: Only support reduction over a single axis" in reduce_view_out of sum(backend/ndarray.py)
+            for axis in reversed(sorted(self.axes)):
+                a = a.sum(axis = axis)
+            return a
+        return array_api.sum(a, axis=self.axes)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        # 我们需要将维度扩张到原先的维度，再在对应的维度上做广播
-        # 举例来说：(3,4,5)->(3,5)，那么我们需要(3,5)->(3,1,5)->(3,4,5)
-        input_shape = node.inputs[0].shape
-        axes = self.axes
-        if axes is None:
-            reshape_shape = [1] * len(input_shape)
-        else:
-            if isinstance(axes, int):
-                axes = (axes,)
-            reshape_shape = list(input_shape)
-            for ax in axes:
-                reshape_shape[ax] = 1
-        return out_grad.reshape(tuple(reshape_shape)).broadcast_to(input_shape)
+        input, = node.inputs
+        input_shape = input.shape
+        
+        expand_dims = list(input_shape)    # 需要扩展到什么维度
+        if self.axes is None:       # 说明summation的结果是矩阵里所有值的和
+            axes = list(range(len(input_shape)))
+        else:                       # 说明规定了在哪些维度上求和
+            if isinstance(self.axes, int):
+                axes = [self.axes]
+            else:
+                axes = self.axes
+        for i in range(len(axes)):
+            expand_dims[axes[i]] = 1
+        out_grad = reshape(out_grad, expand_dims)   # 先把缺少的维度恢复
+        return broadcast_to(out_grad, input_shape)  # 进行广播
         ### END YOUR SOLUTION
-
 
 def summation(a, axes=None):
     return Summation(axes)(a)
@@ -442,12 +519,12 @@ class Flip(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return a.flip(self.axes)
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return flip(out_grad, self.axes)
         ### END YOUR SOLUTION
 
 
@@ -462,12 +539,20 @@ class Dilate(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = list(a.shape)
+        slices = [slice(None)] * len(a.shape)
+        for axis in self.axes:
+            new_shape[axis] *= (self.dilation + 1)
+            slices[axis] = slice(None, None, self.dilation + 1)
+        
+        out = array_api.full(new_shape, 0.0, dtype=a.dtype, device=a.device)
+        out[tuple(slices)] = a
+        return out
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return undilate(out_grad, self.axes, self.dilation)
         ### END YOUR SOLUTION
 
 
@@ -482,12 +567,16 @@ class UnDilate(TensorOp):
 
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        slices = [slice(None)] * len(a.shape)
+        for axis in self.axes:
+            slices[axis] = slice(None, None, self.dilation + 1)
+        out = a[tuple(slices)]
+        return out
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return dilate(out_grad, self.axes, self.dilation)
         ### END YOUR SOLUTION
 
 
@@ -502,12 +591,60 @@ class Conv(TensorOp):
 
     def compute(self, A, B):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # A: (N, H, W, C_in), B: (K, K, C_in, C_out)
+        pad_axes = [(0, 0)] + [(self.padding, self.padding)] * (A.ndim - 2) + [(0, 0)]
+        A = A.pad(pad_axes)
+
+        N, H, W, C_in = A.shape
+        Ns, Hs, Ws, Cs = A.strides
+        K = B.shape[0]
+        out_h = H - K + 1
+        out_w = W - K + 1
+        inner_dim = K * K * C_in
+
+        A_strided = A.as_strided(
+            shape=(N, out_h, out_w, K, K, C_in),
+            strides=(Ns, Hs, Ws, Hs, Ws, Cs)
+        )
+
+        A_2d_shape = (N * out_h * out_w, inner_dim)
+        A_2d = A_strided.compact().reshape(A_2d_shape)
+
+        B_2d = B.compact().reshape((inner_dim, B.shape[3]))
+        out = A_2d @ B_2d
+
+        out_4d = out.reshape((N, out_h, out_w, B.shape[3]))
+
+        if self.stride > 1:
+            out_4d = out_4d[:, ::self.stride, ::self.stride, :]
+        return out_4d
         ### END YOUR SOLUTION
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        A, B = node.inputs
+        N, H, W, C_in = A.shape
+        K, _, _, C_out = B.shape
+        Ns, Hs, Ws, Cs = A.realize_cached_data().strides
+        
+        if self.stride > 1: # If the convolution is strided, increase the size of `out_grad` with a corresponding dilation
+            out_grad = dilate(out_grad, (1, 2), dilation=self.stride - 1)
+            
+        # `X.grad = ≈conv(≈out_grad, ≈W)`
+        B_t = flip(B, (0, 1)).transpose((2, 3)) # `W` should be flipped over both the kernel dimensions
+        # This padding depends on both the kernel size and the `padding` argument to the convolution
+        A_grad = conv(out_grad, B_t, padding = K - 1 - self.padding)
+        
+        # `W.grad = ≈conv(≈X, ≈out_grad)` W.shape = (K, K, C_in, C_out)
+        # A.shape: (N, H, W ,C_in) --> (C_in, H, W, N)
+        A_t = A.transpose((0, 3))   # Consider turning batches into channels via transpose/permute
+        # out_grad dimensions: (N, H-K+1, W-K+1, C_out) --> (H-K+1, W-k+1, N, C_out)
+        out_grad_t = out_grad.permute((1, 2, 0, 3))
+        #  conv( (C_in, H, W, N),  (H-K+1, W-k+1, N, C_out) ) --> (C_in, K, K, C_out)
+        B_grad_t = conv(A_t, out_grad_t, padding=self.padding)
+        B_grad = B_grad_t.permute((1, 2, 0, 3))
+        
+        return A_grad, B_grad
         ### END YOUR SOLUTION
 
 
