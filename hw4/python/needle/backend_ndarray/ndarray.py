@@ -338,9 +338,7 @@ class NDArray:
             elif self.shape[i] == 1:
                 new_strides.append(0)
             else:
-                raise AssertionError(
-                    f"Cannot broadcast shape {self.shape} to {new_shape}"
-                )
+                raise AssertionError(f"Cannot broadcast shape {self.shape} to {new_shape}")
         return NDArray.make(
             shape=new_shape,
             strides=tuple(new_strides),

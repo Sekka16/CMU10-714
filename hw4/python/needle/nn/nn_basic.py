@@ -100,14 +100,14 @@ class Linear(Module):
         if self.bias is None:
             return mul
         else:
-            return mul + ops.broadcast_to(self.bias, mul.shape)
+            return mul + self.bias.broadcast_to(mul.shape)
         ### END YOUR SOLUTION
 
 
 class Flatten(Module):
     def forward(self, X):
         ### BEGIN YOUR SOLUTION
-        return ops.reshape(X, (X.shape[0], -1))
+        return X.reshape((X.shape[0], -1)) 
         ### END YOUR SOLUTION
 
 
@@ -136,7 +136,7 @@ class SoftmaxLoss(Module):
         batch_size = logits.shape[0]
         classes = logits.shape[1]
 
-        normalize_x = ops.logsumexp(logits, axes=1)
+        normalize_x = logits.logsumexp(axes=1)
         y_one_hot = init.one_hot(logits.shape[1], y, device=y.device, dtype=y.dtype)
 
         Z_y = ops.summation(logits * y_one_hot, axes=1)
@@ -162,18 +162,18 @@ class BatchNorm1d(Module):
     def forward(self, x: Tensor) -> Tensor:
         ### BEGIN YOUR SOLUTION
         batch_size, features = x.shape[0], x.shape[1]
-        broadcast_weight = ops.broadcast_to(ops.reshape(self.weight, (1, -1)), x.shape)
-        broadcast_bias = ops.broadcast_to(ops.reshape(self.bias, (1, -1)), x.shape)
+        broadcast_weight = self.weight.reshape((1, -1)).broadcast_to(x.shape)
+        broadcast_bias = self.bias.reshape((1, -1)).broadcast_to(x.shape)
 
         if self.training:
             mean_x = ops.summation(x, axes=0) / batch_size
-            broadcast_mean = ops.broadcast_to(ops.reshape(mean_x, (1, -1)), x.shape)
+            broadcast_mean = mean_x.reshape((1, -1)).broadcast_to(x.shape)
 
             numerator = x - broadcast_mean
 
-            var_x = numerator**2
+            var_x = numerator ** 2
             var_x = ops.summation(var_x / batch_size, axes=0)  # 这里先累加和先处以batch_size是一样的
-            broadcast_var = ops.broadcast_to(ops.reshape(var_x, (1, -1)), x.shape)
+            broadcast_var = var_x.reshape((1, -1)).broadcast_to(x.shape)
 
             denominator = (broadcast_var + self.eps) ** 0.5
 
@@ -185,12 +185,8 @@ class BatchNorm1d(Module):
             self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean_x.data
             self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var_x.data
         else:
-            broadcast_rm = ops.broadcast_to(
-                ops.reshape(self.running_mean, (1, -1)), x.shape
-            )
-            broadcast_rv = ops.broadcast_to(
-                ops.reshape(self.running_var, (1, -1)), x.shape
-            )
+            broadcast_rm = self.running_mean.reshape((1, -1)).broadcast_to(x.shape)
+            broadcast_rv = self.running_var.reshape((1, -1)).broadcast_to(x.shape)
 
             numerator = x - broadcast_rm
             denominator = (broadcast_rv + self.eps) ** 0.5

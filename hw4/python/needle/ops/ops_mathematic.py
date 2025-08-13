@@ -210,36 +210,6 @@ def reshape(a, shape):
     return Reshape(shape)(a)
 
 
-# class BroadcastTo(TensorOp):
-#     def __init__(self, shape):
-#         self.shape = shape
-
-#     def compute(self, a):
-#         ### BEGIN YOUR SOLUTION
-#         return a.broadcast_to(self.shape)
-#         ### END YOUR SOLUTION
-
-#     def gradient(self, out_grad, node):
-#         ### BEGIN YOUR SOLUTION
-#         origin_shape = node.inputs[0].shape
-#         output_shape = out_grad.shape
-#         # 我们用axes记录发生了广播的维度，在这些维度上做summation
-#         axes = []
-#         idx = len(origin_shape) - 1
-#         for i in range(len(output_shape) - 1, -1, -1):
-#           if idx < 0:
-#             axes.append(i)
-#             continue
-#           if output_shape[i] != origin_shape[idx]:
-#             axes.append(i)
-#           idx -= 1
-#         out_grad.sum(tuple(axes))
-#         return reshape(out_grad, origin_shape)
-#         ### END YOUR SOLUTION
-
-
-# def broadcast_to(a, shape):
-#     return BroadcastTo(shape)(a)
 class BroadcastTo(TensorOp):
     def __init__(self, shape):
         self.shape = shape
@@ -306,7 +276,6 @@ class Summation(TensorOp):
     def compute(self, a):
         ### BEGIN YOUR SOLUTION
         if isinstance(self.axes, (list, tuple)) and len(self.axes) > 1:
-            # multiple axes case, avoid "AssertionError: Only support reduction over a single axis" in reduce_view_out of sum(backend/ndarray.py)
             for axis in reversed(sorted(self.axes)):
                 a = a.sum(axis = axis)
             return a
@@ -318,18 +287,18 @@ class Summation(TensorOp):
         input, = node.inputs
         input_shape = input.shape
         
-        expand_dims = list(input_shape)    # 需要扩展到什么维度
-        if self.axes is None:       # 说明summation的结果是矩阵里所有值的和
+        expand_dims = list(input_shape)             # 需要扩展到什么维度
+        if self.axes is None:                       # 说明summation的结果是矩阵里所有值的和
             axes = list(range(len(input_shape)))
-        else:                       # 说明规定了在哪些维度上求和
+        else:                                       # 说明规定了在哪些维度上求和
             if isinstance(self.axes, int):
                 axes = [self.axes]
             else:
                 axes = self.axes
         for i in range(len(axes)):
             expand_dims[axes[i]] = 1
-        out_grad = reshape(out_grad, expand_dims)   # 先把缺少的维度恢复
-        return broadcast_to(out_grad, input_shape)  # 进行广播
+        out_grad = reshape(out_grad, expand_dims)   # 调整输出梯度的形状，恢复被压缩的维度（尺寸为1）
+        return broadcast_to(out_grad, input_shape)  # 例如：(2,1,4)广播为(2,3,4)，与输入形状一致
         ### END YOUR SOLUTION
 
 def summation(a, axes=None):
@@ -433,9 +402,7 @@ class Tanh(TensorOp):
 
     def gradient(self, out_grad, node):
         ### BEGIN YOUR SOLUTION
-        # 需要输出值参与反向传播的算子，要用realize_cached_data()来获取
-        input_data = node.inputs[0].realize_cached_data()
-        return out_grad * (1 - input_data.tanh() ** 2)
+        return out_grad * (1 - node ** 2)
         ### END YOUR SOLUTION
 
 

@@ -332,6 +332,12 @@ class Tensor(Value):
         else:
             return needle.ops.AddScalar(-other)(self)
 
+    def __rsub__(self, other):
+        if isinstance(other, Tensor):
+            return needle.ops.EWiseAdd()(other, needle.ops.Negate()(self))
+        else:
+            return needle.ops.AddScalar(other)(needle.ops.Negate()(self))
+
     def __truediv__(self, other):
         if isinstance(other, Tensor):
             return needle.ops.EWiseDiv()(self, other)
@@ -340,6 +346,9 @@ class Tensor(Value):
 
     def __matmul__(self, other):
         return needle.ops.MatMul()(self, other)
+
+    def __rmatmul__(self, other):
+        return needle.ops.MatMul()(other, self)
 
     def matmul(self, other):
         return needle.ops.MatMul()(self, other)
@@ -364,8 +373,6 @@ class Tensor(Value):
 
     __radd__ = __add__
     __rmul__ = __mul__
-    __rsub__ = __sub__
-    __rmatmul__ = __matmul__
 
 def compute_gradient_of_variables(output_tensor, out_grad):
     """Take gradient of output node with respect to each node in node_list.

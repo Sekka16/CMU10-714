@@ -125,6 +125,13 @@ def test_relu(shape, device):
     A = ndl.Tensor(nd.array(_A), device=device)
     np.testing.assert_allclose(np.maximum(_A, 0), ndl.relu(A).numpy(), atol=1e-5, rtol=1e-5)
 
+@pytest.mark.parametrize("shape", GENERAL_SHAPES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_relu_backward(shape, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    backward_check(ndl.relu, A)
+
 
 @pytest.mark.parametrize("shape", GENERAL_SHAPES)
 @pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
@@ -224,6 +231,15 @@ def test_transpose(shape, axes, device):
     else:
         np_axes = axes
     np.testing.assert_allclose(np.swapaxes(_A, np_axes[0], np_axes[1]), ndl.transpose(A, axes=axes).numpy(), atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize("shape", TRANSPOSE_SHAPES)
+@pytest.mark.parametrize("axes", TRANSPOSE_AXES)
+@pytest.mark.parametrize("device", _DEVICES, ids=["cpu", "cuda"])
+def test_transpose_backward(shape, axes, device):
+    _A = np.random.randn(*shape).astype(np.float32)
+    A = ndl.Tensor(nd.array(_A), device=device)
+    backward_check(ndl.transpose, A, axes=axes)
 
 
 @pytest.mark.parametrize("shape, axes", SUMMATION_PARAMETERS)
